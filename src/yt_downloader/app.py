@@ -10,12 +10,11 @@ from __future__ import annotations
 import platform
 
 from .core import config
+from .qt import QApplication, QMessageBox
 
 
 def _run_dependency_check(window) -> None:
     """Offer to install any missing system tools on startup."""
-    from PySide6.QtWidgets import QMessageBox
-
     from .core import dependencies
     from .gui.workers import DependencyInstallWorker
 
@@ -58,8 +57,6 @@ def _run_dependency_check(window) -> None:
 
 
 def main() -> int:
-    from PySide6.QtWidgets import QApplication
-
     from .gui.main_window import MainWindow
     from .gui.theme import build_stylesheet
 

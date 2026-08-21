@@ -5,19 +5,8 @@ Read-only view; data comes from HistoryStore via MainWindow.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QHeaderView,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
-    QWidget,
-)
-
 from ...core.models import HistoryEntry
+from ...qt import QFont, QHBoxLayout, QHeaderView, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, Signal, QWidget
 
 
 class HistoryTab(QWidget):

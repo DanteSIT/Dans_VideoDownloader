@@ -65,6 +65,12 @@ python main.py                 # or: yt-downloader  /  python -m yt_downloader
 
 System requirement: `ffmpeg` on PATH (merge/MP3 conversion).
 
+### Qt binding
+
+The GUI prefers **PySide6** but automatically falls back to **PyQt5**
+if PySide6 isn't installed (see `src/yt_downloader/qt.py`), so it runs
+on machines that already have either binding.
+
 ## Build an executable (PyInstaller)
 
 ```bash

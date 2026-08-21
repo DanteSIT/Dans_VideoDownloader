@@ -8,26 +8,27 @@ with `# TWEAK:` below.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QGuiApplication, QPixmap
-from PySide6.QtWidgets import (
+from ...core import config, downloader, utils
+from ...core.models import DownloadRequest, VideoInfo
+from ...qt import (
     QCheckBox,
     QComboBox,
     QFileDialog,
     QFrame,
+    QGuiApplication,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPixmap,
     QProgressBar,
     QPushButton,
+    Qt,
     QTextEdit,
     QVBoxLayout,
+    Signal,
     QWidget,
 )
-
-from ...core import config, downloader, utils
-from ...core.models import DownloadRequest, VideoInfo
 from ..theme import COLORS, FONT_CODE, SECTION_LABEL_QSS
 from ..workers import DownloadWorker, FetchWorker, ThumbWorker
 

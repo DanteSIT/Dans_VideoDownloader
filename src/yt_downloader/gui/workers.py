@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import urllib.request
 
-from PySide6.QtCore import QThread, Signal
-
 from ..core import dependencies, downloader
 from ..core.models import DownloadRequest, VideoInfo
+from ..qt import QThread, Signal
 
 
 # ── Fetch video info (URL -> VideoInfo) ──────────────────────────────────

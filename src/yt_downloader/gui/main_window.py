@@ -8,10 +8,9 @@ add it to `self.tabs.addTab(...)`, then wire any signals in `_wire()`.
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMainWindow, QTabWidget, QVBoxLayout
-
 from ..core import config
 from ..core.history import HistoryStore
+from ..qt import QFrame, QHBoxLayout, QLabel, QMainWindow, QTabWidget, QVBoxLayout
 from .tabs.download_tab import DownloadTab
 from .tabs.history_tab import HistoryTab
 from .tabs.queue_tab import QueueTab

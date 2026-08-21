@@ -5,19 +5,8 @@ Queue tab — batch download list. Items are added from the Download tab
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QListWidget,
-    QMessageBox,
-    QProgressBar,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
-
 from ...core.models import DownloadRequest, QueueItem
+from ...qt import QHBoxLayout, QLabel, QListWidget, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, Signal, QWidget
 from ..theme import COLORS
 from ..workers import QueueWorker
 
