@@ -262,7 +262,7 @@ class DownloadTab(QWidget):
         self.thumb_label.setPixmap(
             pix.scaled(
                 self.thumb_label.size(),
-                Qt.AspectRatioMode.IgnoreAspect,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
