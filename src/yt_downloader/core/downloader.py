@@ -18,7 +18,7 @@ import yt_dlp
 
 from .config import RESOLUTIONS
 from .models import DownloadRequest, VideoInfo
-from .utils import strip_ansi
+from .utils import format_file_size, strip_ansi
 
 FetchLog = Callable[[str], None]
 
@@ -220,10 +220,14 @@ def progress_fields(d: dict) -> dict:
         pct = float(raw_p)
     except ValueError:
         pct = 0.0
+    total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
     return {
         "status": d.get("status"),
         "percent": pct,
         "speed": strip_ansi(d.get("_speed_str", "—")),
         "eta": strip_ansi(d.get("_eta_str", "—")),
         "downloaded": strip_ansi(d.get("_downloaded_bytes_str", "—")),
+        "downloaded_bytes": d.get("downloaded_bytes") or 0,
+        "total_bytes": total_bytes,
+        "total": format_file_size(total_bytes),
     }

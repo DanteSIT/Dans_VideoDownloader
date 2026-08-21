@@ -8,20 +8,21 @@ file is safe to tweak and affects the whole app.
 import os
 from pathlib import Path
 
-APP_NAME = "YouTube Downloader"
-# TWEAK: text shown in the red header bar
-APP_HEADER = "▶  YOUTUBE DOWNLOADER"
+APP_NAME = "Video Downloader"
+# TWEAK: text shown in the red header bar (yt-dlp supports 1000+ sites,
+# not just YouTube — rename freely)
+APP_HEADER = "▶  VIDEO DOWNLOADER"
 APP_AUTHOR = "by Dante Lespoir"
 
 # TWEAK: maximum entries kept in download_history.json
 MAX_HISTORY_ENTRIES = 200
 
 # TWEAK: thumbnail preview size (width, height) in pixels
-THUMBNAIL_SIZE = (176, 99)
+THUMBNAIL_SIZE = (200, 112)
 
 # TWEAK: window size / minimum size
-WINDOW_MIN = (560, 640)
-WINDOW_DEFAULT = (680, 800)
+WINDOW_MIN = (600, 700)
+WINDOW_DEFAULT = (720, 860)
 
 # TWEAK: resolutions scanned when building the quality dropdown 240p ~ 8k
 RESOLUTIONS = [4320, 2160, 1440, 1080, 720, 480, 360, 240]

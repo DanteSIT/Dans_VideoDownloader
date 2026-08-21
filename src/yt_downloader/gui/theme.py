@@ -28,7 +28,7 @@ FONT_MAIN = '"Segoe UI", "Ubuntu", "DejaVu Sans", sans-serif'
 FONT_CODE = '"Consolas", "DejaVu Sans Mono", monospace'
 
 SECTION_LABEL_QSS = (
-    f"color: {COLORS['muted']}; font-size: 10px; font-weight: 700; letter-spacing: 1px;"
+    f"color: {COLORS['muted']}; font-size: 15px; letter-spacing: 1px;"
 )
 
 
@@ -39,7 +39,7 @@ QMainWindow, QWidget {{
     background-color: {c['bg']};
     color: {c['text']};
     font-family: {FONT_MAIN};
-    font-size: 12px;
+    font-size: 15px;
 }}
 QLabel {{ background: transparent; }}
 
@@ -66,7 +66,7 @@ QPushButton {{
     color: {c['text']};
     border: 1px solid {c['border']};
     border-radius: 4px;
-    padding: 5px 12px;
+    padding: 6px 14px;
     font-weight: 600;
 }}
 QPushButton:hover {{ background-color: {c['hover']}; }}
@@ -78,7 +78,7 @@ QPushButton[variant="accent"] {{
 }}
 QPushButton[variant="success"] {{
     background-color: {c['success']}; color: #101010; border-color: {c['success']};
-    font-size: 13px; padding: 9px;
+    font-size: 15px; padding: 10px;
 }}
 QPushButton[variant="danger"] {{
     background-color: {c['accent_dim']}; color: {c['accent']};
@@ -124,7 +124,7 @@ QTabWidget::pane {{
 QTabBar::tab {{
     background: {c['panel']};
     color: {c['muted']};
-    padding: 7px 14px;
+    padding: 8px 16px;
     margin-right: 2px;
     font-weight: 700;
     border-top-left-radius: 4px;
@@ -154,7 +154,7 @@ QTextEdit#log {{
     border: 1px solid {c['border']};
     border-radius: 4px;
     font-family: {FONT_CODE};
-    font-size: 11px;
+    font-size: 15px;
 }}
 
 QListWidget {{
@@ -163,7 +163,7 @@ QListWidget {{
     border-radius: 4px;
     outline: none;
     font-family: {FONT_CODE};
-    font-size: 11px;
+    font-size: 15px;
 }}
 QListWidget::item {{ padding: 5px; }}
 QListWidget::item:selected {{ background: {c['border']}; color: {c['text']}; }}
@@ -175,7 +175,7 @@ QTableWidget {{
     gridline-color: {c['border']};
     outline: none;
     font-family: {FONT_CODE};
-    font-size: 11px;
+    font-size: 15px;
 }}
 QTableWidget::item:selected {{ background: {c['border']}; color: {c['text']}; }}
 QHeaderView::section {{
@@ -186,7 +186,7 @@ QHeaderView::section {{
     border-bottom: 1px solid {c['border']};
     font-weight: 700;
     font-family: {FONT_MAIN};
-    font-size: 11px;
+    font-size: 15px;
 }}
 
 QScrollBar:vertical {{

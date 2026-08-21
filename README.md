@@ -5,6 +5,9 @@ core and a PySide6 GUI.
 
 ## Features
 
+- Works with any site yt-dlp supports — YouTube, Facebook, Twitter/X,
+  TikTok, Instagram, Vimeo, Twitch and 1000+ more (see yt-dlp's
+  supported-sites list). Quality detection depends on what each site exposes.
 - URL input with clipboard paste and thumbnail preview
 - Quality picker built from real available formats (with sizes)
 - Audio-only extraction (320 kbps MP3)

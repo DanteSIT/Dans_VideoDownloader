@@ -12,6 +12,7 @@ from ...core import config, downloader, utils
 from ...core.models import DownloadRequest, VideoInfo
 from ...qt import (
     QCheckBox,
+    QTimer,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -22,6 +23,7 @@ from ...qt import (
     QMessageBox,
     QPixmap,
     QProgressBar,
+    QTextCursor,
     QPushButton,
     Qt,
     QTextEdit,
@@ -33,6 +35,14 @@ from ..theme import COLORS, FONT_CODE, SECTION_LABEL_QSS
 from ..workers import DownloadWorker, FetchWorker, ThumbWorker
 
 # TWEAK: log message colors (level -> hex color)
+# TWEAK: connect-animation look (terminal spinner frames + stage messages)
+SPIN_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+CONNECT_STAGES = [
+    (0.0, "Connecting to the server…"),
+    (1.5, "Resolving video page…"),
+    (4.0, "Reading available formats…"),
+]
+
 LOG_COLORS = {
     "info": COLORS["info"],
     "ok": COLORS["success"],
@@ -70,6 +80,9 @@ class DownloadTab(QWidget):
         self.save_dir = save_dir
         self.info: VideoInfo | None = None
         self._fetch_worker: FetchWorker | None = None
+        self._anim_timer: QTimer | None = None
+        self._anim_frame = 0
+        self._anim_t0 = 0.0
         self._thumb_worker: ThumbWorker | None = None
         self._download_worker: DownloadWorker | None = None
 
@@ -98,7 +111,8 @@ class DownloadTab(QWidget):
 
         url_row = QHBoxLayout()
         self.url_entry = QLineEdit()
-        self.url_entry.setPlaceholderText("https://www.youtube.com/watch?v=…")
+        # TWEAK: works with any yt-dlp supported site (YouTube, FB, X, TikTok…)
+        self.url_entry.setPlaceholderText("Paste any video URL — YouTube, Facebook, Twitter/X, TikTok…")
         self.url_entry.textChanged.connect(self._reset_preview)
         url_row.addWidget(self.url_entry, stretch=1)
 
@@ -146,6 +160,15 @@ class DownloadTab(QWidget):
         self.meta_lbl = QLabel("")
         self.meta_lbl.setStyleSheet(f"color: {COLORS['muted']}; font-family: {FONT_CODE};")
         info_col.addWidget(self.meta_lbl)
+
+        # TWEAK: description snippet shown under title/time (set max chars below)
+        self.desc_lbl = QLabel("")
+        self.desc_lbl.setWordWrap(True)
+        self.desc_lbl.setStyleSheet(
+            f"color: {COLORS['muted']}; font-size: 11px; background: transparent;"
+        )
+        self.desc_lbl.setVisible(False)
+        info_col.addWidget(self.desc_lbl)
 
         self.vr_badge = QLabel("")
         self.vr_badge.setStyleSheet(f"color: {COLORS['info']}; font-weight: 700;")
@@ -289,6 +312,8 @@ class DownloadTab(QWidget):
         self._set_thumb_placeholder()
         self.title_lbl.setText("—")
         self.meta_lbl.setText("")
+        self.desc_lbl.setText("")
+        self.desc_lbl.setVisible(False)
         self.vr_badge.setText("")
         self.quality_combo.clear()
         self.quality_combo.addItem("Fetch Info First")
@@ -310,16 +335,64 @@ class DownloadTab(QWidget):
             QMessageBox.warning(self, "No URL", "Please enter a video URL first.")
             return
         self.log_view.clear()
-        self._log("@ Fetching info…")
         self.fetch_btn.setEnabled(False)
         self._set_status("FETCHING…", COLORS["warning"])
+        self._start_connect_animation()
 
         self._fetch_worker = FetchWorker(url, self.playlist_cb.isChecked(), self)
         self._fetch_worker.done.connect(self._on_fetched)
         self._fetch_worker.failed.connect(self._on_fetch_failed)
         self._fetch_worker.start()
 
+    # ── connect animation ────────────────────────────────────────────
+    def _start_connect_animation(self) -> None:
+        import time
+
+        self._anim_frame = 0
+        self._anim_t0 = time.time()
+        self.log_view.append("")
+        self._anim_timer = QTimer(self)
+        self._anim_timer.timeout.connect(self._tick_connect_animation)
+        self._anim_timer.start(120)
+        self._tick_connect_animation()
+
+    def _tick_connect_animation(self) -> None:
+        import time
+
+        elapsed = time.time() - self._anim_t0
+        frame = SPIN_FRAMES[self._anim_frame % len(SPIN_FRAMES)]
+        self._anim_frame += 1
+        stage = CONNECT_STAGES[0][1]
+        for start_at, msg in CONNECT_STAGES:
+            if elapsed >= start_at:
+                stage = msg
+        line = f"@ {frame} {stage} ({elapsed:.0f}s)"
+        self._replace_last_log_line(line)
+
+    def _replace_last_log_line(self, text: str, color: str | None = None) -> None:
+        cursor = QTextCursor(self.log_view.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        c = color or COLORS["info"]
+        safe = (
+            text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        )
+        cursor.insertHtml(f'<span style="color:{c}; white-space:pre-wrap;">{safe}</span>')
+
+    def _stop_connect_animation(self) -> None:
+        if self._anim_timer is not None:
+            self._anim_timer.stop()
+            self._anim_timer.deleteLater()
+            self._anim_timer = None
+        # clear the spinner line so results start on a clean slate
+        cursor = QTextCursor(self.log_view.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+
     def _on_fetched(self, vi: VideoInfo) -> None:
+        self._stop_connect_animation()
         self.info = vi
         if vi.is_playlist:
             self._show_playlist(vi)
@@ -352,6 +425,15 @@ class DownloadTab(QWidget):
         self._log(downloader.format_table(vi), "vr" if vi.is_vr else "")
         self.title_lbl.setText(vi.title)
         self.meta_lbl.setText(f"⏱ {duration}   👁 {views} views   ↑ {uploader}")
+
+        desc = (raw.get("description") or "").strip()
+        if desc:
+            # TWEAK: how many characters of the description to preview
+            limit = 220
+            snippet = desc[:limit].replace("\n", " ")
+            self.desc_lbl.setText(f"📝 {snippet}{'…' if len(desc) > limit else ''}")
+            self.desc_lbl.setVisible(True)
+
         if vi.is_vr:
             self.vr_badge.setText("🔮  360° / VR Video")
 
@@ -363,6 +445,7 @@ class DownloadTab(QWidget):
         self._set_status("READY", COLORS["success"])
 
     def _on_fetch_failed(self, msg: str) -> None:
+        self._stop_connect_animation()
         self._log(f"ERROR: {msg}", "err")
         self._set_status("ERROR", COLORS["accent"])
         self.fetch_btn.setEnabled(True)
@@ -418,7 +501,11 @@ class DownloadTab(QWidget):
             self.progress.setValue(int(pct))
             self.speed_lbl.setText(f"Speed: {d.get('speed', '—')}")
             self.eta_lbl.setText(f"ETA: {d.get('eta', '—')}")
-            self.got_lbl.setText(f"Got: {d.get('downloaded', '—')}")
+            got_bytes = d.get("downloaded_bytes") or 0
+            got_txt = utils.format_file_size(got_bytes) if got_bytes else d.get("downloaded", "—")
+            total_txt = d.get("total", "Unknown")
+            size_txt = f"Got: {got_txt} of {total_txt}" if total_txt != "Unknown" else f"Got: {got_txt}"
+            self.got_lbl.setText(size_txt)
             self._set_status(f"DOWNLOADING {pct:.0f}%", COLORS["warning"])
         elif d["status"] == "finished":
             self._set_status("PROCESSING…", COLORS["info"])
