@@ -74,8 +74,8 @@ class DownloadTab(QWidget):
         self._download_worker: DownloadWorker | None = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 16)
-        root.setSpacing(6)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(4)
 
         self._build_url_section(root)
         root.addWidget(_separator())
@@ -168,18 +168,19 @@ class DownloadTab(QWidget):
 
     def _build_quality_section(self, root: QVBoxLayout) -> None:
         q_row = QHBoxLayout()
+        q_row.setSpacing(8)
         q_row.addWidget(_section_label("QUALITY"))
-        q_row.addStretch(1)
+
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItem("Fetch Info First")
+        q_row.addWidget(self.quality_combo, stretch=1)
 
         self.fetch_btn = QPushButton("🔍  FETCH INFO")
         self.fetch_btn.setProperty("variant", "accent")
         self.fetch_btn.clicked.connect(self._fetch_info)
         q_row.addWidget(self.fetch_btn)
-        root.addLayout(q_row)
 
-        self.quality_combo = QComboBox()
-        self.quality_combo.addItem("Fetch Info First")
-        root.addWidget(self.quality_combo)
+        root.addLayout(q_row)
 
     def _build_log_section(self, root: QVBoxLayout) -> None:
         root.addWidget(_section_label("OUTPUT LOG"))
@@ -187,7 +188,7 @@ class DownloadTab(QWidget):
         self.log_view.setObjectName("log")
         self.log_view.setReadOnly(True)
         # TWEAK: height of the output log box
-        self.log_view.setFixedHeight(110)
+        self.log_view.setFixedHeight(88)
         root.addWidget(self.log_view)
 
     def _build_progress_section(self, root: QVBoxLayout) -> None:
@@ -223,7 +224,8 @@ class DownloadTab(QWidget):
         self.download_btn = QPushButton("⬇  DOWNLOAD")
         self.download_btn.setProperty("variant", "success")
         self.download_btn.setEnabled(False)
-        self.download_btn.clicked.connect(self._start_download)
+        # TWEAK: while downloading this button becomes the STOP button
+        self.download_btn.clicked.connect(self._on_download_clicked)
         btn_row.addWidget(self.download_btn, stretch=1)
 
         self.queue_btn = QPushButton("+ QUEUE")
@@ -386,12 +388,20 @@ class DownloadTab(QWidget):
         self.add_to_queue.emit(req, title)
         self._log(f"+ Queued: {title}", "ok")
 
+    def _on_download_clicked(self) -> None:
+        if self._download_worker is not None:
+            self._download_worker.cancel()
+            self.download_btn.setEnabled(False)
+            self._set_status("STOPPING…", COLORS["warning"])
+            return
+        self._start_download()
+
     def _start_download(self) -> None:
         req = self._current_request()
         if req is None or self._download_worker is not None:
             return
-        self.download_btn.setEnabled(False)
         self.queue_btn.setEnabled(False)
+        self.download_btn.setText("⏹  STOP")
         self._set_status("STARTING…", COLORS["warning"])
 
         self._download_worker = DownloadWorker(req, self.save_dir, bool(self.info.is_vr), self)
@@ -399,7 +409,7 @@ class DownloadTab(QWidget):
         worker.progress.connect(self._on_progress)
         worker.stage.connect(lambda s: self._set_status(s, COLORS["info"]))
         worker.log.connect(lambda m: self._log(m, "warn"))
-        worker.result.connect(lambda ok, title, _label: self._on_download_result(ok, title))
+        worker.result.connect(self._on_download_result)
         worker.start()
 
     def _on_progress(self, d: dict) -> None:
@@ -413,14 +423,24 @@ class DownloadTab(QWidget):
         elif d["status"] == "finished":
             self._set_status("PROCESSING…", COLORS["info"])
 
-    def _on_download_result(self, ok: bool, title: str) -> None:
+    def _on_download_result(self, status: str, title: str, _label: str = "") -> None:
         worker = self._download_worker
         self._download_worker = None
         req = worker.request if worker else None
 
         self.download_btn.setEnabled(True)
+        self.download_btn.setText("⬇  DOWNLOAD")
         self.queue_btn.setEnabled(True)
 
+        if status == "cancelled":
+            self.progress.setValue(0)
+            self.speed_lbl.setText("Speed: —")
+            self.eta_lbl.setText("ETA: —")
+            self.got_lbl.setText("Got: —")
+            self._set_status("CANCELLED", COLORS["muted"])
+            return
+
+        ok = status == "ok"
         if ok:
             self._set_status("COMPLETE ✓", COLORS["success"])
             self.progress.setValue(100)

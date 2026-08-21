@@ -58,19 +58,19 @@ class MainWindow(QMainWindow):
     def _build_header(self) -> QFrame:
         header = QFrame()
         header.setObjectName("header")
-        header.setFixedHeight(56)
+        header.setFixedHeight(44)
 
         row = QHBoxLayout(header)
         row.setContentsMargins(20, 8, 20, 8)
 
         title = QLabel(config.APP_HEADER)
-        title.setStyleSheet("font-size: 18px; font-weight: 800;")
+        title.setStyleSheet("font-size: 15px; font-weight: 800;")
         row.addWidget(title)
 
         row.addStretch(1)
 
         author = QLabel(config.APP_AUTHOR)
-        author.setStyleSheet("font-size: 11px; color: #ffcccc;")
+        author.setStyleSheet("font-size: 10px; color: #ffcccc;")
         row.addWidget(author)
 
         return header

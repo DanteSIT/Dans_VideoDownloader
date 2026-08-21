@@ -17,11 +17,11 @@ APP_AUTHOR = "by Dante Lespoir"
 MAX_HISTORY_ENTRIES = 200
 
 # TWEAK: thumbnail preview size (width, height) in pixels
-THUMBNAIL_SIZE = (320, 180)
+THUMBNAIL_SIZE = (176, 99)
 
 # TWEAK: window size / minimum size
-WINDOW_MIN = (600, 750)
-WINDOW_DEFAULT = (760, 980)
+WINDOW_MIN = (560, 640)
+WINDOW_DEFAULT = (680, 800)
 
 # TWEAK: resolutions scanned when building the quality dropdown 240p ~ 8k
 RESOLUTIONS = [4320, 2160, 1440, 1080, 720, 480, 360, 240]

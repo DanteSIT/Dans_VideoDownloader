@@ -24,8 +24,8 @@ class QueueTab(QWidget):
         self._worker: QueueWorker | None = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 16)
-        root.setSpacing(6)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(4)
 
         header = QLabel("DOWNLOAD QUEUE")
         hint = QLabel("Add items from the Download tab, then press Run All.")
@@ -38,9 +38,10 @@ class QueueTab(QWidget):
 
         btn_row = QHBoxLayout()
 
+        # TWEAK: while running this button becomes the STOP button
         self.run_btn = QPushButton("▶  RUN ALL")
         self.run_btn.setProperty("variant", "success")
-        self.run_btn.clicked.connect(self._run_all)
+        self.run_btn.clicked.connect(self._on_run_clicked)
         btn_row.addWidget(self.run_btn)
 
         remove_btn = QPushButton("✕  Remove")
@@ -101,19 +102,25 @@ class QueueTab(QWidget):
 
     # ── queue execution ──────────────────────────────────────────────
 
+    def _on_run_clicked(self) -> None:
+        if self._worker is not None:
+            self._worker.cancel()
+            self.run_btn.setEnabled(False)
+            self.progress_lbl.setText("Stopping after current item…")
+            return
+        self._run_all()
+
     def _run_all(self) -> None:
         if not self.items:
             QMessageBox.information(self, "Queue Empty", "Add items to the queue first.")
             return
-        if self._worker is not None:
-            return  # already running
 
         pending = [it.request for it in self.items if it.status != "Done"]
         if not pending:
             QMessageBox.information(self, "Nothing To Do", "All items are already done.")
             return
 
-        self.run_btn.setEnabled(False)
+        self.run_btn.setText("⏹  STOP")
         self.queue_bar.setValue(0)
 
         worker = QueueWorker(pending, self.save_dir, self)
@@ -137,8 +144,8 @@ class QueueTab(QWidget):
         self.queue_bar.setValue(int((index / max(total, 1)) * 100))
         self._refresh_list()
 
-    def _on_item_finished(self, index: int, ok: bool, title: str, quality: str) -> None:
-        pending = self._pending_items()
+    def _on_item_finished(self, index: int, status: str, title: str, quality: str) -> None:
+        pending = [it for it in self.items if it.status != "Done" and it.status != "Cancelled"]
         item = pending[index] if index < len(pending) else None
         if item is None:
             # fallback: mark first working item
@@ -147,16 +154,19 @@ class QueueTab(QWidget):
                     item = it
                     break
         if item:
-            item.status = "Done" if ok else "Failed"
+            item.status = {"ok": "Done", "cancelled": "Cancelled"}.get(status, "Failed")
         self._refresh_list()
-        if ok:
+        if status == "ok":
             self.item_completed.emit(title or (item.title if item else ""), quality, True)
 
     def _on_all_finished(self, _total: int) -> None:
-        self.queue_bar.setValue(100)
-        self.progress_lbl.setText("Queue complete ✓")
+        cancelled = any(it.status == "Cancelled" for it in self.items)
+        self.queue_bar.setValue(0 if cancelled else 100)
+        self.progress_lbl.setText("Queue stopped ⏹" if cancelled else "Queue complete ✓")
+        self.run_btn.setText("▶  RUN ALL")
         self.run_btn.setEnabled(True)
         if self._worker is not None:
             self._worker.deleteLater()
             self._worker = None
-        QMessageBox.information(self, "Queue Done", f"Finished processing the queue.")
+        if not cancelled:
+            QMessageBox.information(self, "Queue Done", "Finished processing the queue.")

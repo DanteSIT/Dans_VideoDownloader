@@ -12,8 +12,10 @@ import shutil
 import subprocess
 import sys
 
-# TWEAK: system tools checked at startup (must be on PATH)
-SYSTEM_TOOLS = ["ffmpeg", "atomicparsley"]
+# TWEAK: system tools checked at startup (must be on PATH).
+# Only ffmpeg is required — mutagen (Python pkg) covers M4A embedding,
+# so AtomicParsley is no longer needed at all.
+SYSTEM_TOOLS = ["ffmpeg"]
 
 _INSTALL_CMDS = {
     "apt-get": ["sudo", "apt-get", "install", "-y", "-qq"],

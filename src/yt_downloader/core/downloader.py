@@ -151,8 +151,20 @@ def download(
     on_progress: Callable[[dict], None] | None = None,
     on_postprocess: Callable[[dict], None] | None = None,
     log: FetchLog | None = None,
-) -> tuple[bool, str]:
+    should_cancel: Callable[[], bool] | None = None,
+) -> tuple[str, str]:
+    """Run a download. Returns (status, title) with status one of
+    "ok" | "cancelled" | "failed". Set should_cancel to a callable that
+    returns True when the user wants to stop."""
     title = "Unknown"
+
+    def _guard(hook):
+        def inner(d: dict) -> None:
+            if should_cancel and should_cancel():
+                raise yt_dlp.utils.DownloadCancelled()
+            if hook:
+                hook(d)
+        return inner
 
     def run(opts: dict) -> str | None:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -161,15 +173,19 @@ def download(
 
     opts = build_opts(request, save_dir, is_vr)
     hooks = {
-        "progress_hooks": ([on_progress] if on_progress else []),
-        "postprocessor_hooks": ([on_postprocess] if on_postprocess else []),
+        "progress_hooks": ([_guard(on_progress)] if on_progress or should_cancel else []),
+        "postprocessor_hooks": ([_guard(on_postprocess)] if on_postprocess or should_cancel else []),
     }
     opts.update(hooks)
     try:
         found = run(opts)
         if found:
             title = found
-        return True, title
+        return "ok", title
+    except yt_dlp.utils.DownloadCancelled:
+        if log:
+            log("⏹ Cancelled by user")
+        return "cancelled", title
     except Exception:
         if log:
             log("⚠ Primary failed, trying fallback…")
@@ -187,11 +203,15 @@ def download(
             found = run(opts2)
             if found:
                 title = found
-            return True, title
+            return "ok", title
+        except yt_dlp.utils.DownloadCancelled:
+            if log:
+                log("⏹ Cancelled by user")
+            return "cancelled", title
         except Exception as exc:
             if log:
                 log(f"ERROR: {exc}")
-            return False, title
+            return "failed", title
 
 
 def progress_fields(d: dict) -> dict:

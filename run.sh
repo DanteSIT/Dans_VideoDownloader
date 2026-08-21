@@ -84,7 +84,7 @@ fi
 
 # ── 4. project itself ────────────────────────────────────────────────────
 step "Project install"
-"$PY" -m pip install --quiet --no-deps -e .
+"$PY" -m pip install --quiet -e .
 info "yt-downloader installed in editable mode"
 
 # ── 5. pre-flight checks ─────────────────────────────────────────────────

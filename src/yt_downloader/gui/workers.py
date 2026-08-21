@@ -57,24 +57,30 @@ class DownloadWorker(QThread):
     progress = Signal(dict)          # percent / speed / eta / downloaded
     stage = Signal(str)              # status text ("MERGING…")
     log = Signal(str)                # warning lines for the output log
-    result = Signal(bool, str, str)  # ok, title, quality label
+    result = Signal(str, str, str)   # status ("ok"|"cancelled"|"failed"), title, quality label
 
     def __init__(self, request: DownloadRequest, save_dir: str, is_vr: bool, parent=None) -> None:
         super().__init__(parent)
         self.request = request
         self.save_dir = save_dir
         self.is_vr = is_vr
+        self._cancel = False
+
+    # TWEAK: call cancel() to stop the current download
+    def cancel(self) -> None:
+        self._cancel = True
 
     def run(self) -> None:
-        ok, title = downloader.download(
+        status, title = downloader.download(
             self.request,
             self.save_dir,
             self.is_vr,
             on_progress=self._on_progress,
             on_postprocess=self._on_postprocess,
             log=lambda msg: self.log.emit(msg),
+            should_cancel=lambda: self._cancel,
         )
-        self.result.emit(ok, title, self.request.label)
+        self.result.emit(status, title, self.request.label)
 
     def _on_progress(self, d: dict) -> None:
         self.progress.emit(downloader.progress_fields(d))
@@ -87,11 +93,11 @@ class DownloadWorker(QThread):
 # ── Batch queue runner ───────────────────────────────────────────────────
 
 class QueueWorker(QThread):
-    item_started = Signal(int, str)          # index, url
+    item_started = Signal(int, str)              # index, url
     item_progress = Signal(dict)
     item_stage = Signal(str)
     item_log = Signal(str)
-    item_finished = Signal(int, bool, str, str)  # index, ok, title, quality
+    item_finished = Signal(int, str, str, str)   # index, status, title, quality
     all_finished = Signal(int)
 
     def __init__(self, items: list[DownloadRequest], save_dir: str, parent=None) -> None:
@@ -100,7 +106,7 @@ class QueueWorker(QThread):
         self.save_dir = save_dir
         self._cancelled = False
 
-    # TWEAK: call cancel() to stop after the current item finishes
+    # TWEAK: call cancel() to stop after (or during) the current item
     def cancel(self) -> None:
         self._cancelled = True
 
@@ -110,15 +116,18 @@ class QueueWorker(QThread):
             if self._cancelled:
                 break
             self.item_started.emit(idx, req.url)
-            ok, title = downloader.download(
+            status, title = downloader.download(
                 req,
                 self.save_dir,
                 False,
                 on_progress=lambda d: self.item_progress.emit(downloader.progress_fields(d)),
                 on_postprocess=self._item_postprocess,
                 log=lambda msg: self.item_log.emit(msg),
+                should_cancel=lambda: self._cancelled,
             )
-            self.item_finished.emit(idx, ok, title, req.label)
+            self.item_finished.emit(idx, status, title, req.label)
+            if status == "cancelled":
+                break
         self.all_finished.emit(total)
 
     def _item_postprocess(self, d: dict) -> None:
