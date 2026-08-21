@@ -1,4 +1,4 @@
-"""Enables running the app with: python -m yt_downloader"""
+"""Enables running the app with: python -m video_downloader"""
 
 from .app import main
 

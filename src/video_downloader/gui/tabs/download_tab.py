@@ -8,11 +8,12 @@ with `# TWEAK:` below.
 
 from __future__ import annotations
 
+import time
+
 from ...core import config, downloader, utils
 from ...core.models import DownloadRequest, VideoInfo
 from ...qt import (
     QCheckBox,
-    QTimer,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -23,13 +24,14 @@ from ...qt import (
     QMessageBox,
     QPixmap,
     QProgressBar,
-    QTextCursor,
     QPushButton,
     Qt,
+    QTextCursor,
     QTextEdit,
+    QTimer,
     QVBoxLayout,
-    Signal,
     QWidget,
+    Signal,
 )
 from ..theme import COLORS, FONT_CODE, SECTION_LABEL_QSS
 from ..workers import DownloadWorker, FetchWorker, ThumbWorker
@@ -38,10 +40,13 @@ from ..workers import DownloadWorker, FetchWorker, ThumbWorker
 # TWEAK: connect-animation look (terminal spinner frames + stage messages)
 SPIN_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 CONNECT_STAGES = [
-    (0.0, "Connecting to the server…"),
-    (1.5, "Resolving video page…"),
-    (4.0, "Reading available formats…"),
+    (0.0, "Resolving hostname…"),
+    (2.0, "Establishing secure channel…"),
+    (5.0, "Negotiating stream formats…"),
 ]
+
+# TWEAK: minimum seconds between live terminal line repaints (throttle)
+LIVE_REFRESH = 0.1
 
 LOG_COLORS = {
     "info": COLORS["info"],
@@ -49,7 +54,13 @@ LOG_COLORS = {
     "warn": COLORS["warning"],
     "err": COLORS["accent"],
     "vr": COLORS["info"],
+    # TWEAK: gray used for yt-dlp's own terminal chatter
+    "debug": "#8a8f98",
 }
+
+
+def _ts() -> str:
+    return time.strftime("%H:%M:%S")
 
 
 # ── Small UI helpers ─────────────────────────────────────────────────────
@@ -83,6 +94,10 @@ class DownloadTab(QWidget):
         self._anim_timer: QTimer | None = None
         self._anim_frame = 0
         self._anim_t0 = 0.0
+        self._live_active = False      # a live download line is in the log
+        self._last_live = 0.0          # throttle timestamp for live line
+        self._last_live_text = ""      # last rendered live line (for freeze)
+        self._dl_t0 = 0.0              # download start time (elapsed stat)
         self._thumb_worker: ThumbWorker | None = None
         self._download_worker: DownloadWorker | None = None
 
@@ -97,12 +112,12 @@ class DownloadTab(QWidget):
         root.addWidget(_separator())
         self._build_quality_section(root)
         root.addWidget(_separator())
+        # the log is the flexible element — it grows/shrinks with the
+        # window while progress + buttons stay pinned at the bottom
         self._build_log_section(root)
         root.addWidget(_separator())
         self._build_progress_section(root)
         self._build_action_buttons(root)
-
-        root.addStretch(1)
 
     # ── UI construction ──────────────────────────────────────────────
 
@@ -112,7 +127,9 @@ class DownloadTab(QWidget):
         url_row = QHBoxLayout()
         self.url_entry = QLineEdit()
         # TWEAK: works with any yt-dlp supported site (YouTube, FB, X, TikTok…)
-        self.url_entry.setPlaceholderText("Paste any video URL — YouTube, Facebook, Twitter/X, TikTok…")
+        self.url_entry.setPlaceholderText(
+            "Paste any video URL — YouTube, Facebook, Twitter/X, TikTok…"
+        )
         self.url_entry.textChanged.connect(self._reset_preview)
         url_row.addWidget(self.url_entry, stretch=1)
 
@@ -210,9 +227,9 @@ class DownloadTab(QWidget):
         self.log_view = QTextEdit()
         self.log_view.setObjectName("log")
         self.log_view.setReadOnly(True)
-        # TWEAK: height of the output log box
-        self.log_view.setFixedHeight(88)
-        root.addWidget(self.log_view)
+        # TWEAK: minimum log height — it stretches to fill leftover space
+        self.log_view.setMinimumHeight(96)
+        root.addWidget(self.log_view, stretch=1)
 
     def _build_progress_section(self, root: QVBoxLayout) -> None:
         self.progress = QProgressBar()
@@ -262,6 +279,11 @@ class DownloadTab(QWidget):
     # ── helpers ──────────────────────────────────────────────────────
 
     def _log(self, msg: str, level: str = "info") -> None:
+        # if a live stats line sits at the bottom, freeze it into history
+        # first so normal output always lands BELOW the last stats frame
+        if self._live_active:
+            self._freeze_live_line()
+            self._live_active = False
         color = LOG_COLORS.get(level, COLORS["info"])
         safe = (
             msg.replace("&", "&amp;")
@@ -270,6 +292,14 @@ class DownloadTab(QWidget):
             .replace("\n", "<br>")
         )
         self.log_view.append(f'<span style="color:{color}; white-space:pre-wrap;">{safe}</span>')
+
+    def _on_ydl_log(self, msg: str, level: str = "info") -> None:
+        """Real output from yt-dlp — replaces the spinner animation the
+        moment the server starts talking."""
+        if self._anim_timer is not None:
+            self._stop_connect_animation()
+        if msg.strip():
+            self._log(msg, level)
 
     def _set_status(self, text: str, color: str) -> None:
         self.status_lbl.setText(text)
@@ -337,28 +367,33 @@ class DownloadTab(QWidget):
         self.log_view.clear()
         self.fetch_btn.setEnabled(False)
         self._set_status("FETCHING…", COLORS["warning"])
-        self._start_connect_animation()
+        self._start_connect_animation(url)
 
         self._fetch_worker = FetchWorker(url, self.playlist_cb.isChecked(), self)
         self._fetch_worker.done.connect(self._on_fetched)
         self._fetch_worker.failed.connect(self._on_fetch_failed)
+        # mirror yt-dlp's own terminal lines (connecting, checking, formats…)
+        self._fetch_worker.log.connect(self._on_ydl_log)
+        # real measured connection stats for the terminal intro
+        self._fetch_worker.netstat.connect(self._on_netstat)
         self._fetch_worker.start()
 
-    # ── connect animation ────────────────────────────────────────────
-    def _start_connect_animation(self) -> None:
-        import time
-
+    # ── connect animation (hacker-movie style, real data only) ───────
+    def _start_connect_animation(self, url: str) -> None:
         self._anim_frame = 0
         self._anim_t0 = time.time()
+        self._log(f"▶ TARGET: {url}", "info")
+        self._log_view_placeholder_line()
+
+    def _log_view_placeholder_line(self) -> None:
+        """Append an empty line that later gets rewritten in place."""
         self.log_view.append("")
-        self._anim_timer = QTimer(self)
-        self._anim_timer.timeout.connect(self._tick_connect_animation)
-        self._anim_timer.start(120)
-        self._tick_connect_animation()
+        if self._anim_timer is None:
+            self._anim_timer = QTimer(self)
+            self._anim_timer.timeout.connect(self._tick_connect_animation)
+            self._anim_timer.start(120)
 
     def _tick_connect_animation(self) -> None:
-        import time
-
         elapsed = time.time() - self._anim_t0
         frame = SPIN_FRAMES[self._anim_frame % len(SPIN_FRAMES)]
         self._anim_frame += 1
@@ -366,8 +401,25 @@ class DownloadTab(QWidget):
         for start_at, msg in CONNECT_STAGES:
             if elapsed >= start_at:
                 stage = msg
-        line = f"@ {frame} {stage} ({elapsed:.0f}s)"
+        line = f"[{_ts()}] {frame} {stage} ({elapsed:.1f}s)"
         self._replace_last_log_line(line)
+
+    def _on_netstat(self, ns: dict) -> None:
+        """Print the measured handshake — DNS / TCP / TLS with real ms."""
+        if not ns:
+            return
+        self._stop_connect_animation()
+        self._log(
+            f"  resolving {ns['host']} … {ns['ip']}  ({ns['dns_ms']:.0f} ms)", "debug"
+        )
+        self._log(
+            f"  tcp connect {ns['ip']}:443  ({ns['tcp_ms']:.0f} ms)", "debug"
+        )
+        self._log(
+            f"  {ns['proto']} handshake ok — {ns['cipher']}  ({ns['tls_ms']:.0f} ms)",
+            "ok",
+        )
+        self._log_view_placeholder_line()
 
     def _replace_last_log_line(self, text: str, color: str | None = None) -> None:
         cursor = QTextCursor(self.log_view.document())
@@ -491,29 +543,71 @@ class DownloadTab(QWidget):
         worker = self._download_worker
         worker.progress.connect(self._on_progress)
         worker.stage.connect(lambda s: self._set_status(s, COLORS["info"]))
-        worker.log.connect(lambda m: self._log(m, "warn"))
+        worker.log.connect(self._on_ydl_log)
+        worker.netstat.connect(self._on_netstat)
         worker.result.connect(self._on_download_result)
+        self._live_active = False
+        self._last_live = 0.0
+        self._dl_t0 = time.time()
         worker.start()
 
     def _on_progress(self, d: dict) -> None:
         if d["status"] == "downloading":
             pct = d.get("percent", 0.0)
             self.progress.setValue(int(pct))
-            self.speed_lbl.setText(f"Speed: {d.get('speed', '—')}")
-            self.eta_lbl.setText(f"ETA: {d.get('eta', '—')}")
+            speed = d.get("speed", "—")
+            eta = d.get("eta", "—")
             got_bytes = d.get("downloaded_bytes") or 0
             got_txt = utils.format_file_size(got_bytes) if got_bytes else d.get("downloaded", "—")
             total_txt = d.get("total", "Unknown")
-            size_txt = f"Got: {got_txt} of {total_txt}" if total_txt != "Unknown" else f"Got: {got_txt}"
+            size_txt = (
+                f"Got: {got_txt} of {total_txt}"
+                if total_txt != "Unknown"
+                else f"Got: {got_txt}"
+            )
+            self.speed_lbl.setText(f"Speed: {speed}")
+            self.eta_lbl.setText(f"ETA: {eta}")
             self.got_lbl.setText(size_txt)
             self._set_status(f"DOWNLOADING {pct:.0f}%", COLORS["warning"])
+            self._update_live_line(pct, got_txt, total_txt, speed, eta)
         elif d["status"] == "finished":
             self._set_status("PROCESSING…", COLORS["info"])
+            self._live_active = False
+            self._log("✔ stream complete — merging tracks…", "ok")
 
-    def _on_download_result(self, status: str, title: str, _label: str = "") -> None:
+    # ── live terminal line (real stats, rewritten in place) ──────────
+
+    def _update_live_line(self, pct: float, got: str, total: str, speed: str, eta: str) -> None:
+        now = time.time()
+        if not self._live_active:
+            self._log_view_placeholder_line()
+            self._live_active = True
+        elif now - self._last_live < LIVE_REFRESH:
+            return
+        self._last_live = now
+        frame = SPIN_FRAMES[self._anim_frame % len(SPIN_FRAMES)]
+        self._anim_frame += 1
+        elapsed = now - self._dl_t0
+        total_part = f" / {total}" if total != "Unknown" else ""
+        line = (
+            f"[{_ts()}] {frame} {pct:5.1f}% │ {got}{total_part}"
+            f" │ {speed}/s │ ETA {eta} │ {elapsed:.0f}s elapsed"
+        )
+        self._last_live_text = line
+        self._replace_last_log_line(line, COLORS["success"])
+
+    def _freeze_live_line(self) -> None:
+        """Pin the last live stats frame into the log history."""
+        if self._last_live_text:
+            self._replace_last_log_line(self._last_live_text, COLORS["success"])
+
+    def _on_download_result(
+        self, status: str, title: str, _label: str = "", folder: str = ""
+    ) -> None:
         worker = self._download_worker
         self._download_worker = None
         req = worker.request if worker else None
+        self._live_active = False
 
         self.download_btn.setEnabled(True)
         self.download_btn.setText("⬇  DOWNLOAD")
@@ -528,12 +622,14 @@ class DownloadTab(QWidget):
             return
 
         ok = status == "ok"
+        # files live inside their own title/ subfolder now
+        target = folder or self.save_dir
         if ok:
             self._set_status("COMPLETE ✓", COLORS["success"])
             self.progress.setValue(100)
             self._log(f"✔ Done: {title}", "ok")
             quality = req.label if req else ""
-            self.download_completed.emit(title, quality, self.save_dir, True)
+            self.download_completed.emit(title, quality, target, True)
             answer = QMessageBox.question(
                 self,
                 "Done ✓",
@@ -541,7 +637,7 @@ class DownloadTab(QWidget):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if answer == QMessageBox.StandardButton.Yes:
-                utils.open_folder(self.save_dir)
+                utils.open_folder(target)
         else:
             self._set_status("FAILED", COLORS["accent"])
             self.download_completed.emit(title or "", "", self.save_dir, False)

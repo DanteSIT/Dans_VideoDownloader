@@ -8,18 +8,55 @@ same shape.
 
 from __future__ import annotations
 
+import socket
+import ssl
+import time
+import urllib.parse
 import urllib.request
 
 from ..core import dependencies, downloader
-from ..core.models import DownloadRequest, VideoInfo
+from ..core.models import DownloadRequest
 from ..qt import QThread, Signal
-
 
 # ── Fetch video info (URL -> VideoInfo) ──────────────────────────────────
 
+def measure_connection(url: str) -> dict:
+    """Real network probe for the terminal animation: DNS lookup,
+    TCP connect and TLS handshake timings against the target host."""
+    out: dict = {}
+    try:
+        host = urllib.parse.urlparse(url).hostname or ""
+        if not host:
+            return out
+        t0 = time.perf_counter()
+        ip = socket.gethostbyname(host)
+        dns_ms = (time.perf_counter() - t0) * 1000
+        t1 = time.perf_counter()
+        raw = socket.create_connection((ip, 443), timeout=8)
+        tcp_ms = (time.perf_counter() - t1) * 1000
+        t2 = time.perf_counter()
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE  # we only probe latency here
+        with ctx.wrap_socket(raw, server_hostname=host) as tls:
+            cipher = (tls.cipher() or ("?", 0, "?"))[0]
+            proto = tls.version() or "?"
+        tls_ms = (time.perf_counter() - t2) * 1000
+        out = {
+            "host": host, "ip": ip,
+            "dns_ms": dns_ms, "tcp_ms": tcp_ms, "tls_ms": tls_ms,
+            "cipher": cipher, "proto": proto,
+        }
+    except Exception:
+        pass  # probe is cosmetic — real work happens in yt-dlp
+    return out
+
+
 class FetchWorker(QThread):
-    done = Signal(object)      # emits VideoInfo
-    failed = Signal(str)       # emits error message
+    done = Signal(object)          # emits VideoInfo
+    failed = Signal(str)           # emits error message
+    log = Signal(str, str)         # yt-dlp terminal lines (msg, level)
+    netstat = Signal(dict)         # measured DNS/TCP/TLS stats
 
     def __init__(self, url: str, playlist: bool, parent=None) -> None:
         super().__init__(parent)
@@ -27,8 +64,12 @@ class FetchWorker(QThread):
         self.playlist = playlist
 
     def run(self) -> None:
+        self.netstat.emit(measure_connection(self.url))
         try:
-            self.done.emit(downloader.fetch_info(self.url, self.playlist))
+            logger = downloader._SignalLogger(self.log.emit)
+            self.done.emit(
+                downloader.fetch_info(self.url, self.playlist, ydl_logger=logger)
+            )
         except Exception as exc:
             self.failed.emit(str(exc))
 
@@ -54,10 +95,12 @@ class ThumbWorker(QThread):
 # ── Single download ──────────────────────────────────────────────────────
 
 class DownloadWorker(QThread):
-    progress = Signal(dict)          # percent / speed / eta / downloaded
-    stage = Signal(str)              # status text ("MERGING…")
-    log = Signal(str)                # warning lines for the output log
-    result = Signal(str, str, str)   # status ("ok"|"cancelled"|"failed"), title, quality label
+    progress = Signal(dict)             # percent / speed / eta / downloaded
+    stage = Signal(str)                 # status text ("MERGING…")
+    log = Signal(str, str)              # yt-dlp terminal lines (msg, level)
+    netstat = Signal(dict)              # measured DNS/TCP/TLS stats
+    # status ("ok"|"cancelled"|"failed"), title, quality label, folder
+    result = Signal(str, str, str, str)
 
     def __init__(self, request: DownloadRequest, save_dir: str, is_vr: bool, parent=None) -> None:
         super().__init__(parent)
@@ -71,16 +114,19 @@ class DownloadWorker(QThread):
         self._cancel = True
 
     def run(self) -> None:
-        status, title = downloader.download(
+        self.netstat.emit(measure_connection(self.request.url))
+        logger = downloader._SignalLogger(self.log.emit)
+        status, title, folder = downloader.download(
             self.request,
             self.save_dir,
             self.is_vr,
             on_progress=self._on_progress,
             on_postprocess=self._on_postprocess,
-            log=lambda msg: self.log.emit(msg),
+            log=lambda msg: self.log.emit(msg, "warn"),
             should_cancel=lambda: self._cancel,
+            ydl_logger=logger,
         )
-        self.result.emit(status, title, self.request.label)
+        self.result.emit(status, title, self.request.label, folder)
 
     def _on_progress(self, d: dict) -> None:
         self.progress.emit(downloader.progress_fields(d))
@@ -96,7 +142,7 @@ class QueueWorker(QThread):
     item_started = Signal(int, str)              # index, url
     item_progress = Signal(dict)
     item_stage = Signal(str)
-    item_log = Signal(str)
+    item_log = Signal(str, str)                  # yt-dlp terminal lines (msg, level)
     item_finished = Signal(int, str, str, str)   # index, status, title, quality
     all_finished = Signal(int)
 
@@ -111,19 +157,21 @@ class QueueWorker(QThread):
         self._cancelled = True
 
     def run(self) -> None:
+        logger = downloader._SignalLogger(self.item_log.emit)
         total = len(self.items)
         for idx, req in enumerate(self.items):
             if self._cancelled:
                 break
             self.item_started.emit(idx, req.url)
-            status, title = downloader.download(
+            status, title, _folder = downloader.download(
                 req,
                 self.save_dir,
                 False,
                 on_progress=lambda d: self.item_progress.emit(downloader.progress_fields(d)),
                 on_postprocess=self._item_postprocess,
-                log=lambda msg: self.item_log.emit(msg),
+                log=lambda msg: self.item_log.emit(msg, "warn"),
                 should_cancel=lambda: self._cancelled,
+                ydl_logger=logger,
             )
             self.item_finished.emit(idx, status, title, req.label)
             if status == "cancelled":

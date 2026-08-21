@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "yt-downloader"
+name = "video-downloader"
 version = "2.0.0"
 description = "YouTube downloader with a Qt GUI: quality picker, MP3 extraction, playlists, queue and history."
 requires-python = ">=3.10"
@@ -20,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-yt-downloader = "yt_downloader.app:main"
+video-downloader = "video_downloader.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

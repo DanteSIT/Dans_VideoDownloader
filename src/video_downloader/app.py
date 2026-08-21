@@ -2,7 +2,7 @@
 Application bootstrap — builds the QApplication, applies the dark theme,
 shows MainWindow and runs the startup dependency check (ffmpeg /
 atomicparsley). This is the single entry point used by main.py,
-`python -m yt_downloader` and the `yt-downloader` console script.
+`python -m video_downloader` and the `video-downloader` console script.
 """
 
 from __future__ import annotations
@@ -48,7 +48,10 @@ def _run_dependency_check(window) -> None:
         msg = f"Installed {installed} dependencies.\n\nFailed to install {len(failed)}:\n\n"
         msg += "\n".join(f"  • {item}" for item in failed)
         if platform.system() == "Windows":
-            msg += "\n\nFor Windows, you can manually download:\n  • " + dependencies.WINDOWS_MANUAL_LINKS
+            msg += (
+                f"\n\nFor Windows, you can manually download:\n"
+                f"  • {dependencies.WINDOWS_MANUAL_LINKS}"
+            )
         QMessageBox.warning(window, "Installation Partial", msg)
 
     worker.done.connect(on_done)

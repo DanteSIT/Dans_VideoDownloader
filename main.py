@@ -15,7 +15,7 @@ SRC_DIR = Path(__file__).resolve().parent / "src"
 if SRC_DIR.is_dir() and str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from yt_downloader.app import main
+from video_downloader.app import main  # noqa: E402  (needs sys.path set up first)
 
 if __name__ == "__main__":
     raise SystemExit(main())

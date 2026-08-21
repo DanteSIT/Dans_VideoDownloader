@@ -6,7 +6,17 @@ Read-only view; data comes from HistoryStore via MainWindow.
 from __future__ import annotations
 
 from ...core.models import HistoryEntry
-from ...qt import QFont, QHBoxLayout, QHeaderView, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, Signal, QWidget
+from ...qt import (
+    QFont,
+    QHBoxLayout,
+    QHeaderView,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+    Signal,
+)
 
 
 class HistoryTab(QWidget):

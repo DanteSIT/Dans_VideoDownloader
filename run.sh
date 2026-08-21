@@ -85,11 +85,11 @@ fi
 # ── 4. project itself ────────────────────────────────────────────────────
 step "Project install"
 "$PY" -m pip install --quiet -e .
-info "yt-downloader installed in editable mode"
+info "video-downloader installed in editable mode"
 
 # ── 5. pre-flight checks ─────────────────────────────────────────────────
 step "Pre-flight checks"
-QT_LIB="$("$PY" -c "import sys; sys.path.insert(0, 'src'); from yt_downloader.qt import QT_LIB; print(QT_LIB)" 2>/dev/null || echo unknown)"
+QT_LIB="$("$PY" -c "import sys; sys.path.insert(0, 'src'); from video_downloader.qt import QT_LIB; print(QT_LIB)" 2>/dev/null || echo unknown)"
 info "Qt binding : $QT_LIB"
 if command -v ffmpeg >/dev/null 2>&1; then
     info "ffmpeg     : found ✓"
@@ -98,5 +98,5 @@ else
 fi
 
 # ── 6. launch ────────────────────────────────────────────────────────────
-step "Launching YouTube Downloader"
+step "Launching Video Downloader"
 exec "$PY" main.py "$@"

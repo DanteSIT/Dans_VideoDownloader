@@ -44,7 +44,7 @@ def install_tools(tools: list[str]) -> tuple[int, list[str]]:
 
     manager = next((m for m in _INSTALL_CMDS if shutil.which(m)), None)
     if manager is None:
-        return 0, [f"Manual: {t}" for t in tools] 
+        return 0, [f"Manual: {t}" for t in tools]
 
     installed = 0
     failed: list[str] = []

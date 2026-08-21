@@ -6,7 +6,17 @@ Queue tab — batch download list. Items are added from the Download tab
 from __future__ import annotations
 
 from ...core.models import DownloadRequest, QueueItem
-from ...qt import QHBoxLayout, QLabel, QListWidget, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, Signal, QWidget
+from ...qt import (
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+    Signal,
+)
 from ..theme import COLORS
 from ..workers import QueueWorker
 
@@ -22,6 +32,7 @@ class QueueTab(QWidget):
         self.save_dir = save_dir
         self.items: list[QueueItem] = []
         self._worker: QueueWorker | None = None
+        self._run_items: list[QueueItem] = []
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
@@ -122,21 +133,20 @@ class QueueTab(QWidget):
 
         self.run_btn.setText("⏹  STOP")
         self.queue_bar.setValue(0)
+        self._run_items = [
+            it for it in self.items if it.status != "Done" and it.status != "Cancelled"
+        ]
 
-        worker = QueueWorker(pending, self.save_dir, self)
+        worker = QueueWorker([it.request for it in self._run_items], self.save_dir, self)
         worker.item_started.connect(self._on_item_started)
         worker.item_finished.connect(self._on_item_finished)
         worker.all_finished.connect(self._on_all_finished)
         worker.start()
         self._worker = worker
 
-    def _pending_items(self) -> list[QueueItem]:
-        return [it for it in self.items if it.status != "Done"]
-
     def _on_item_started(self, index: int, url: str) -> None:
-        pending = self._pending_items()
-        total = len(pending) or len(self.items)
-        item = pending[index] if index < len(pending) else None
+        total = len(self._run_items)
+        item = self._run_items[index] if index < total else None
         if item:
             item.status = "Working"
         title = (item.title or url)[:50] if item else url[:50]
@@ -145,8 +155,7 @@ class QueueTab(QWidget):
         self._refresh_list()
 
     def _on_item_finished(self, index: int, status: str, title: str, quality: str) -> None:
-        pending = [it for it in self.items if it.status != "Done" and it.status != "Cancelled"]
-        item = pending[index] if index < len(pending) else None
+        item = self._run_items[index] if index < len(self._run_items) else None
         if item is None:
             # fallback: mark first working item
             for it in self.items:

@@ -1,0 +1,58 @@
+# Build standalone executables for Linux AND Windows on every tag push
+# (PyInstaller cannot cross-compile — each OS builds its own binary here).
+#
+# Usage:
+#   git tag v2.1.0 && git push --tags
+#   → artifacts appear under the run: VideoDownloader-linux, VideoDownloader-windows.exe
+
+name: build-executables
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: VideoDownloader-linux
+          - os: windows-latest
+            artifact: VideoDownloader-windows.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install . pyinstaller
+
+      # ffmpeg is bundled next to the exe so end users don't need it installed
+      - name: Bundle ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          mkdir bin && cp "$(which ffmpeg)" bin/
+        shell: bash
+
+      - name: Bundle ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $resp = Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath .
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Copy-Item (Get-ChildItem -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName bin/
+        shell: pwsh
+
+      - name: Build binary
+        run: pyinstaller --onefile --windowed --name VideoDownloader --add-data "bin${{ runner.os == 'Windows' && ';' || ':' }}bin" --collect-submodules yt_dlp main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/VideoDownloader*

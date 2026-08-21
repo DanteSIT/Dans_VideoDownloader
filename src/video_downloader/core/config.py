@@ -18,7 +18,7 @@ APP_AUTHOR = "by Dante Lespoir"
 MAX_HISTORY_ENTRIES = 200
 
 # TWEAK: thumbnail preview size (width, height) in pixels
-THUMBNAIL_SIZE = (200, 112)
+THUMBNAIL_SIZE = (320, 180)
 
 # TWEAK: window size / minimum size
 WINDOW_MIN = (600, 700)
