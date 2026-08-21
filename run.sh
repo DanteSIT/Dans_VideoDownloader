@@ -96,6 +96,12 @@ if command -v ffmpeg >/dev/null 2>&1; then
 else
     info "ffmpeg     : ⚠ NOT FOUND — video merge / MP3 conversion will fail"
 fi
+JS_RUNTIME="$(command -v deno || command -v node || command -v bun || command -v quickjs || true)"
+if [ -n "$JS_RUNTIME" ]; then
+    info "js-runtime : $(basename "$JS_RUNTIME") ✓ (YouTube challenge solving)"
+else
+    info "js-runtime : ⚠ none — install deno or node for full YouTube support"
+fi
 
 # ── 6. launch ────────────────────────────────────────────────────────────
 step "Launching Video Downloader"

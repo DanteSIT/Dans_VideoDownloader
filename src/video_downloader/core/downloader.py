@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from collections.abc import Callable
 
 import yt_dlp
@@ -29,6 +30,22 @@ from .utils import format_duration, format_file_size, strip_ansi
 
 FetchLog = Callable[[str], None]
 CancelCheck = Callable[[], bool]
+
+
+def find_js_runtime() -> str | None:
+    """YouTube needs a JavaScript runtime for its challenges.
+    yt-dlp only enables deno by default — pick whichever we can find."""
+    # TWEAK: order of preferred JS runtimes
+    for name in ("deno", "node", "bun", "quickjs"):
+        if shutil.which(name):
+            return name
+    return None
+
+
+def _apply_js_runtime(opts: dict) -> None:
+    runtime = find_js_runtime()
+    if runtime:
+        opts["js_runtimes"] = {runtime: {}}
 
 
 class _SignalLogger:
@@ -53,7 +70,14 @@ class _SignalLogger:
         self._emit(strip_ansi(msg), "info")
 
     def warning(self, msg: str) -> None:
-        self._emit(strip_ansi(msg), "warn")
+        msg = strip_ansi(msg)
+        self._emit(msg, "warn")
+        if "JavaScript runtime" in msg:
+            self._emit(
+                "  ↳ tip: install Deno (docs.deno.com) or Node.js so all"
+                " YouTube formats stay available",
+                "info",
+            )
 
     def error(self, msg: str) -> None:
         self._emit(strip_ansi(msg), "err")
@@ -73,6 +97,7 @@ def fetch_info(url: str, playlist: bool, ydl_logger=None) -> VideoInfo:
     }
     if ydl_logger is not None:
         opts["logger"] = ydl_logger
+    _apply_js_runtime(opts)
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     if info is None:
@@ -310,6 +335,7 @@ def download(
         ),
     }
     opts.update(hooks)
+    _apply_js_runtime(opts)
     if ydl_logger is not None:
         opts["logger"] = ydl_logger
 
