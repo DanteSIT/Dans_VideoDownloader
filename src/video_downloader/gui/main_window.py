@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from ..core import config
 from ..core.history import HistoryStore
-from ..qt import QFrame, QHBoxLayout, QLabel, QMainWindow, QTabWidget, QVBoxLayout
+from ..qt import QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QTabWidget, QVBoxLayout
 from .tabs.download_tab import DownloadTab
 from .tabs.history_tab import HistoryTab
 from .tabs.queue_tab import QueueTab
@@ -112,8 +112,6 @@ class MainWindow(QMainWindow):
         self.history_tab.refresh(self.history.entries)
 
     def _on_clear_history(self) -> None:
-        from PySide6.QtWidgets import QMessageBox
-
         answer = QMessageBox.question(
             self,
             "Clear History",

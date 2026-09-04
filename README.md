@@ -89,9 +89,8 @@ System requirement: `ffmpeg` on PATH (merge/MP3 conversion).
 
 ### Qt binding
 
-The GUI prefers **PySide6** but automatically falls back to **PyQt5**
-if PySide6 isn't installed (see `src/video_downloader/qt.py`), so it runs
-on machines that already have either binding.
+The GUI is built exclusively on **PySide6** (see `src/video_downloader/qt.py`),
+installed automatically by the launcher script.
 
 ## Build an executable
 
